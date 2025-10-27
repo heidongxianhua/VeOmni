@@ -165,7 +165,7 @@ class _checkpoint_hook(torch.autograd.graph.saved_tensors_hooks):
                 gid = int(uuid.uuid4())
 
             def fake_post_forward(self, *args, **kwargs):
-                print("run fake post_forward")
+                # print("run fake post_forward")
                 pass
 
             if not frame.is_recomputed[gid]:
