@@ -31,7 +31,7 @@ from ..models import load_model_weights, rank0_load_and_broadcast_weights
 from ..utils import logging
 from ..utils.device import get_device_id, get_device_type
 from ..utils.import_utils import is_torch_version_greater_than
-from .checkpoint import CheckpointFunction
+from .checkpoint import CheckpointFunction, _checkpoint_hook
 from .fsdp import (
     clip_grad_norm_,
     init_fsdp_fn,

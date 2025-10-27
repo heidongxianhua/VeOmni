@@ -1,6 +1,9 @@
 import contextlib
 
 import torch
+import weakref
+from weakref import ReferenceType
+import uuid
 from torch.distributed.fsdp._common_utils import _get_module_fsdp_state_if_fully_sharded_module, _module_handle
 from torch.distributed.fsdp._runtime_utils import (
     _post_backward_hook,
@@ -14,6 +17,11 @@ from torch.utils.checkpoint import (
     detach_variable,
     get_device_states,
     set_device_states,
+    _Holder,
+    _recomputation_hook,
+    _StopRecomputationError,
+    _internal_assert,
+    CheckpointError,
 )
 
 
@@ -135,3 +143,72 @@ class CheckpointFunction(torch.autograd.Function):
             _post_backward_hook(state, handle, None)
 
         return (None, None) + grads
+
+
+class _checkpoint_hook(torch.autograd.graph.saved_tensors_hooks):
+    def __init__(self, frame):
+        def pack_hook(x):
+            # See Rule 4 above
+            holder = _Holder()
+            frame.weak_holders.append(weakref.ref(holder))
+            # Save metadata to detect non-determinism
+            if frame.metadata_fn is not None:
+                with torch.no_grad():
+                    frame.x_metadatas.append(frame.metadata_fn(x))
+            return holder
+
+        def unpack_hook(holder):
+            
+            gid = torch._C._current_graph_task_id()
+            if gid == -1:
+                # generate a temporary id if we trigger unpack outside of a backward call
+                gid = int(uuid.uuid4())
+
+            def fake_post_forward(self, *args, **kwargs):
+                print("run fake post_forward")
+                pass
+
+            if not frame.is_recomputed[gid]:
+                ctx = frame.input_saver.grad_fn
+                args = ctx.get_args(ctx.saved_tensors)
+                from torch.distributed.fsdp._fully_shard._fsdp_param_group import FSDPParamGroup
+                try:
+                    with _recomputation_hook(
+                        weakref.ref(frame), gid
+                    ), torch.autograd.enable_grad():
+                        # print(f"_checkpoint_hook unpack_hook, recompute_fn, fn= {frame.fn}, type={type(frame.fn.__self__)}, type={type(frame.fn.__self__)}")
+                        # fsdp_group = frame.fn.__self__._get_fsdp_state()._fsdp_param_group
+                        # print(f"fsdp_group info in ck {id(fsdp_group)},{type(fsdp_group)}")
+                        origin_post_forward = FSDPParamGroup.post_forward
+                        FSDPParamGroup.post_forward = fake_post_forward
+                        frame.recompute_fn(*args)
+                        # print("_checkpoint_hook unpack_hook, recompute_fn ===== done")
+                except _StopRecomputationError:
+                    # print("_checkpoint_hook unpack_hook, recompute_fn ===== stop")
+                    pass
+                FSDPParamGroup.post_forward = origin_post_forward
+                frame.is_recomputed[gid] = True
+                frame.check_recomputed_tensors_match(gid)
+
+            _internal_assert(gid in holder.handles)
+
+            if holder.handles[gid] is None:
+                raise CheckpointError(
+                    "torch.utils.checkpoint: Unpack is being triggered for a tensor that was already "
+                    "unpacked once. If you are calling ctx.saved_tensors in backward, make sure to do "
+                    "so only once. Otherwise please open an issue with details on your use case."
+                )
+            _internal_assert(holder.handles[gid] in frame.recomputed[gid])
+            ret = frame.recomputed[gid][holder.handles[gid]]
+            holder.handles[gid] = None
+            return ret
+
+        if frame.unpack_error_cb is not None:
+            def unpack_hook_with_error_cb(holder):
+                try:
+                    return unpack_hook(holder)
+                except CheckpointError as e:
+                    frame.unpack_error_cb(e)
+            super().__init__(pack_hook, unpack_hook_with_error_cb)
+        else:
+            super().__init__(pack_hook, unpack_hook)
