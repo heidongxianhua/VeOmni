@@ -432,6 +432,8 @@ def build_parallelize_model(
         use_reentrant = kwargs.pop("enable_reentrant", False)
         if use_reentrant:
             torch.utils.checkpoint.CheckpointFunction = CheckpointFunction
+        else:
+            torch.utils.checkpoint._checkpoint_hook = _checkpoint_hook
 
         model.gradient_checkpointing_enable(
             gradient_checkpointing_kwargs={
