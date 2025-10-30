@@ -39,6 +39,7 @@ from .fsdp import (
     parallel_load_safetensors,
     register_checkpoint_extension,
 )
+from .fsdp2.fsdp2_patched import patched_fsdp2_methods
 from .parallel_state import get_parallel_state
 from .utils import get_module_from_path, set_module_from_path
 
@@ -234,6 +235,8 @@ def parallelize_model_fsdp2(
     3. Apply FSDP2 to regular modules: Standard dim-0 sharding
     4. Result: Expert params [32,H/fsdp_size,I], regular params use standard FSDP2
     """
+    # only for npu now
+    patched_fsdp2_methods()
     parallel_state = get_parallel_state()
 
     # Step 0: Get target classes to shard later
