@@ -2,10 +2,10 @@ import logging
 from typing import Any
 
 import torch
-from torch.distributed._composable.fsdp._fully_shard._fsdp_collectives import foreach_reduce
-from torch.distributed._composable.fsdp._fully_shard._fsdp_common import TrainingState, compiled_autograd_enabled
-from torch.distributed._composable.fsdp._fully_shard._fsdp_param import FSDPParam
-from torch.distributed._composable.fsdp._fully_shard._fsdp_param_group import (
+from torch.distributed.fsdp._fully_shard._fsdp_collectives import foreach_reduce
+from torch.distributed.fsdp._fully_shard._fsdp_common import TrainingState, compiled_autograd_enabled
+from torch.distributed.fsdp._fully_shard._fsdp_param import FSDPParam
+from torch.distributed.fsdp._fully_shard._fsdp_param_group import (
     AllReduceState,
     FSDPParamGroup,
     ReduceScatterState,
