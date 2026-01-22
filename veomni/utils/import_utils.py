@@ -91,6 +91,8 @@ def is_transformers_version_greater_or_equal_to(value: str) -> bool:
 def is_veomni_patch_available() -> bool:
     return _PACKAGE_FLAGS["veomni_patch"]
 
+def is_xpu_models_available() -> bool:
+    return _PACKAGE_FLAGS["xpu_models"]
 
 _FFMPEG_AVAILABLE = None
 
